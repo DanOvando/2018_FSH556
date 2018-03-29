@@ -1,13 +1,5 @@
-
-# Install packages
-# install.packages("devtools")
-# devtools::install_github("nwfsc-assess/geostatistical_delta-GLMM")
-
 # Load TMB
 library( TMB )
-
-# Set working directory (change on other machine!)
-# setwd( "C:/Users/James.Thorson/Desktop/Project_git/2018_FSH556/Week 1 -- Likelihoods and linear models/Lecture 1" )
 
 
 ############
@@ -58,6 +50,7 @@ TMB::compile(here::here("src","linear_model_v1.cpp"))
 
 # Step 2 -- build inputs and object
 dyn.load( dynlib(here::here("src","linear_model_v1")))
+
 Params = list("mean"=0, "log_sd"=0)
 Data = list( "y_i"=CPUE )
 Obj = MakeADFun( data=Data, parameters=Params, DLL="linear_model_v1")
@@ -82,6 +75,7 @@ compile(here::here("src","linear_model_v2.cpp"))
 
 # Step 2 -- build inputs and object
 dyn.load( dynlib(here::here("src","linear_model_v2")) )
+
 Params = list("b_j"=rep(0,ncol(X)), "log_sd"=0)
 Data = list( "y_i"=CPUE, "X_ij"=X )
 Obj = MakeADFun( data=Data, parameters=Params, DLL="linear_model_v2")
