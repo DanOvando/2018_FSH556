@@ -1,0 +1,45 @@
+---
+title: "fsh556 Notes"
+author: "Dan Ovando"
+date: "3/27/2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, eval = FALSE, message = FALSE, warning = FALSE)
+library(TMB)
+library(tidyverse)
+
+
+```
+
+# lecture 1
+
+second derivative informs whether a minimum is a "true" global minimum, first derivative for local minima. 
+
+## why maximum likelihood ?
+
+You can transform parameters and still end up with the same likelihood profile, which is not necessarily true of Bayesian models
+
+consistent in the limit
+
+asymptotic normality
+
+
+# lab 1
+
+poisson, number of people that hit a website in a given time
+
+decay of radioactive material 
+
+newton was the first optimizer! quasi newton methods, optimize by second derivatives
+
+nelder-mead is like a little aomeba that searches around with a different leg for each parameter and just hunts aroung. With TMB, you pass a gradient to nelder-mead
+
+check that hessian matrix is positive definite
+
+
+
+#
+
+

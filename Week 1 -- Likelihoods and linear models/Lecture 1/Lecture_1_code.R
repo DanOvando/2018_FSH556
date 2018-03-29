@@ -1,13 +1,13 @@
 
 # Install packages
-install.packages("devtools")
-devtools::install_github("nwfsc-assess/geostatistical_delta-GLMM")
+# install.packages("devtools")
+# devtools::install_github("nwfsc-assess/geostatistical_delta-GLMM")
 
 # Load TMB
 library( TMB )
 
 # Set working directory (change on other machine!)
-setwd( "C:/Users/James.Thorson/Desktop/Project_git/2018_FSH556/Week 1 -- Likelihoods and linear models/Lecture 1" )
+# setwd( "C:/Users/James.Thorson/Desktop/Project_git/2018_FSH556/Week 1 -- Likelihoods and linear models/Lecture 1" )
 
 
 ############
@@ -51,10 +51,13 @@ print(sqrt( diag( solve(Opt$hessian) )) ) # standard errors
 
 ###### Method 3 -- Optimize using TMB
 # Step 1 -- make and compile template file
-compile( "linear_model_v1.cpp" )
+
+
+# setwd("Week 1 -- Likelihoods and linear models/Lecture 1/")
+TMB::compile(here::here("src","linear_model_v1.cpp"))
 
 # Step 2 -- build inputs and object
-dyn.load( dynlib("linear_model_v1") )
+dyn.load( dynlib(here::here("src","linear_model_v1")))
 Params = list("mean"=0, "log_sd"=0)
 Data = list( "y_i"=CPUE )
 Obj = MakeADFun( data=Data, parameters=Params, DLL="linear_model_v1")
@@ -75,10 +78,10 @@ SD = sdreport( Obj ) # standard errors
 X = cbind( "CA"=ifelse(WCGBTS_Canary_example$BEST_LAT_DD<42,1,0), "OR"=ifelse(WCGBTS_Canary_example$BEST_LAT_DD>=42&WCGBTS_Canary_example$BEST_LAT_DD<46,1,0), "WA"=ifelse(WCGBTS_Canary_example$BEST_LAT_DD>=46,1,0), "Pass"=WCGBTS_Canary_example$PASS-1.5 )
 
 # Step 1 -- make and compile template file
-compile( "linear_model_v2.cpp" )
+compile(here::here("src","linear_model_v2.cpp"))
 
 # Step 2 -- build inputs and object
-dyn.load( dynlib("linear_model_v2") )
+dyn.load( dynlib(here::here("src","linear_model_v2")) )
 Params = list("b_j"=rep(0,ncol(X)), "log_sd"=0)
 Data = list( "y_i"=CPUE, "X_ij"=X )
 Obj = MakeADFun( data=Data, parameters=Params, DLL="linear_model_v2")
