@@ -40,6 +40,28 @@ check that hessian matrix is positive definite
 
 
 
-#
+# lecture-2
+
+we like consistency (will converge to the best estimate of the correct model or the best for the mispecified model) and asymptotic normality 
+
+why is stein's paradox a paradox? you'd expecte the mean for each person to be the best predictor for that person, rather than a better predictor is that person with some shrinkage towards the mean
+
+w in shrinkage slides is precision, or inverse variance
+
+residual variance in lme4 is the variance of the error term in a linear model
+
+A full rank matrix every eigen value of the matrix is greater than zero. If it is rank deficient then one or more eigen values will be basically zero. We need full rank for laplace approximation
+
+Rank of a matrix is the number of linearaly independent columns in a matrix
+
+Lapalce approximation fails if one or more matrices is rank deficient. 
+
+Standard errors will also fail if one matrix is rank deficient 
+
+If you estimate the model and that works but the standard errors fail, then its fixed effects problem, if it fails in the fitting stage, the problem may be in the random effect
+
+Why treat "study" as a random effect? Might have very little data for any one individual study, so random effect might help. Hierarchichal model gives you what you might actually want which is the mean effect across the the effects. 
+
+TO invert a matrix you need it to be full rank. So, if the hessian is no rank, then you can't invert it, so you can't get the standard errors
 
 

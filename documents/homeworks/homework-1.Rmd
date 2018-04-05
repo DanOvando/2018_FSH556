@@ -1,0 +1,90 @@
+---
+title: "homework_1"
+author: "Dan Ovando"
+date: "4/5/2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, messages = FALSE, warning = FALSE)
+```
+
+```{r}
+library(TMB)
+library(TMBhelper)
+library(SpatialDeltaGLMM)
+library(patchwork)
+library(tidyverse)
+
+data(EBS_pollock_data, package="SpatialDeltaGLMM")
+
+pol <- EBS_pollock_data
+
+rm(EBS_pollock_data)
+
+head(pol)
+
+```
+
+
+```{r}
+
+seen <- pol %>% 
+  filter(catch > 0) %>% 
+  ggplot(aes(catch)) + 
+  geom_histogram() + 
+  scale_x_log10()
+
+seeing <- pol %>% 
+  ggplot(aes(catch > 0)) + 
+  geom_histogram(stat = "count") 
+
+seen + seeing
+
+```
+
+Goal:
+1.	A generalized linear model (GLM) with a delta-lognormal distribution (see Week 1 lab) using design matrix X=1 and a log-link (i.e., only a single intercept)
+2.	A GLM with a delta-gamma distribution only using a single intercept and a log-link
+3.	A GLM with a distribution of your choice, potentially involving covariates, but which in some way differs from #1 and #2
+
+
+```{r}
+
+pol$intercept = 1
+
+data <- list(
+  catches = pol$catch,
+  seeing_catches = as.numeric(pol$catch > 0),
+  variables = pol %>% select(intercept) %>% as.matrix()
+)
+
+params <-  list(seen_betas = 0, seeing_betas=0, log_sigma_seen = 0)
+
+TMB::compile(here::here("src","homework_1.cpp"))
+
+dyn.load(dynlib(here::here("src","homework_1")))
+
+obj <-MakeADFun(data=data, parameters=params)
+
+obj$fn( obj$par )
+obj$gr( obj$par )
+
+opt <-  nlminb( start = obj$par, objective = obj$fn, gradient=obj$gr)
+
+opt$diagnostics = data.frame( "name"=names(obj$par), "Est"=opt$par, "final_gradient"=as.vector(obj$gr(opt$par)))
+
+report <- obj$report()
+
+report$prob_seeing * report$seen_catch_hat
+
+mean(log(pol$catch[pol$catch >0]))
+
+out <- data_frame(model = "delta_ln", log_like = obj$fn(), n_pars = length(obj$par))
+
+```
+
+
+
+
+
