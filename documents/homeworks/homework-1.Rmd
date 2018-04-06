@@ -16,13 +16,37 @@ library(SpatialDeltaGLMM)
 library(patchwork)
 library(tidyverse)
 
+functions <- list.files(here::here("functions"))
+
+walk(functions, ~ here::here("functions", .x) %>% source()) # load local functions
+
 data(EBS_pollock_data, package="SpatialDeltaGLMM")
 
-pol <- EBS_pollock_data
+pol <- EBS_pollock_data %>% 
+  set_names(tolower)
+
+
+pol <- pol %>% 
+  mutate(watertmpc = ifelse( watertmpc == min(watertmpc, na.rm = T), NA,watertmpc))
+
+temp_reg <- caret::knnreg(watertmpc ~ lat + long + year, data = pol)
+
+temp_hat <- predict(temp_reg, pol)
+
+pol$temp_hat <- temp_hat
+
+pol %>% 
+  ggplot(aes(watertmpc, temp_hat)) + 
+  geom_point()
+
+pol <- pol %>% 
+  mutate(watertmpc = ifelse(is.na(watertmpc), temp_hat, watertmpc),
+         intercept = 1,
+         factor_year = as.factor(year))
+
+
 
 rm(EBS_pollock_data)
-
-head(pol)
 
 ```
 
@@ -33,6 +57,7 @@ seen <- pol %>%
   filter(catch > 0) %>% 
   ggplot(aes(catch)) + 
   geom_histogram() + 
+  geom_vline(aes(xintercept = 4)) +
   scale_x_log10()
 
 seeing <- pol %>% 
@@ -46,43 +71,246 @@ seen + seeing
 Goal:
 1.	A generalized linear model (GLM) with a delta-lognormal distribution (see Week 1 lab) using design matrix X=1 and a log-link (i.e., only a single intercept)
 2.	A GLM with a delta-gamma distribution only using a single intercept and a log-link
-3.	A GLM with a distribution of your choice, potentially involving covariates, but which in some way differs from #1 and #2
+3.	A GLM with a distribution of your choice, potentially involving covariates, but which in some way differs from 
+
+# Part 1
+
+## model estimates
 
 
 ```{r}
 
-pol$intercept = 1
 
 data <- list(
   catches = pol$catch,
   seeing_catches = as.numeric(pol$catch > 0),
-  variables = pol %>% select(intercept) %>% as.matrix()
+  variables = pol %>% select(intercept) %>% as.matrix(),
+  seen_dist = 1,
+  in_sample = rep(1, nrow(pol))
 )
 
-params <-  list(seen_betas = 0, seeing_betas=0, log_sigma_seen = 0)
 
 TMB::compile(here::here("src","homework_1.cpp"))
 
 dyn.load(dynlib(here::here("src","homework_1")))
 
-obj <-MakeADFun(data=data, parameters=params)
+# glm(log(catch) ~ intercept - 1, data = pol %>% filter(catch > 0))
 
-obj$fn( obj$par )
-obj$gr( obj$par )
+# a = glm(catch ~ intercept - 1, data = pol %>% filter(catch > 0), family = Gamma(link = "log"))
 
-opt <-  nlminb( start = obj$par, objective = obj$fn, gradient=obj$gr)
 
-opt$diagnostics = data.frame( "name"=names(obj$par), "Est"=opt$par, "final_gradient"=as.vector(obj$gr(opt$par)))
+models <- expand.grid(data = list(pol), 
+                               seen_model = c("log_normal","gamma"),
+                               variables = list("intercept",c("intercept", "watertmpc","lat","long")), stringsAsFactors = F) %>% 
+  as_data_frame()
 
-report <- obj$report()
+true_models <- models %>% 
+  mutate(fit = pmap(list(
+    data = data,
+    seen_model = seen_model, 
+    variables = variables
+  ), fit_hw1))
 
-report$prob_seeing * report$seen_catch_hat
+plot(log(pol$catch),log(true_models$fit[[4]]$report[[1]]$seen_catch_hat))
 
-mean(log(pol$catch[pol$catch >0]))
-
-out <- data_frame(model = "delta_ln", log_like = obj$fn(), n_pars = length(obj$par))
 
 ```
+
+
+## test model performance
+
+```{r}
+prep_data <- function(data){
+  
+  data$id <- 1:nrow(data)
+  
+  splits <- rsample::vfold_cv(data, v = 10, repeats = 1)
+  
+  foo <- function(data){
+      temp_data <- rsample::analysis(data) %>%
+  mutate(in_sample = 1) %>%
+    bind_rows(rsample::assessment(data) %>% mutate(in_sample = 0)) %>%
+    arrange(id)
+  }
+  
+  splits <- splits %>% 
+    mutate(data = map(splits, foo))
+  
+  return(splits$data)
+}
+
+
+pol_splits <- data_frame(splits = prep_data(pol), thing = 1)
+
+models <- expand.grid(data = list(pol), 
+                               seen_model = c("log_normal","gamma"),
+                               variables = list("intercept",c("intercept", "watertmpc","lat","long")), stringsAsFactors = F) %>% 
+  as_data_frame() %>% 
+  mutate(thing = 1)
+
+pol_splits <- pol_splits %>% 
+  left_join(models, by = "thing")
+
+pol_splits_fits <- pol_splits %>% 
+  mutate(fit = pmap(list(
+    data = splits,
+    seen_model = seen_model, 
+    variables = variables
+  ), fit_hw1))
+
+
+
+model_performance <- pol_splits_fits %>% 
+  select(seen_model, fit, variables) %>% 
+  mutate(summary = map_dbl(fit,"l_pred_score"),
+         variables = map_chr(variables,~paste(.x,collapse = "-"))) %>% 
+  ggplot(aes(variables, summary, fill = seen_model)) + 
+  geom_boxplot() + 
+  facet_wrap(~seen_model, scales = "free_y")
+
+model_performance
+
+
+
+```
+
+With the mean l_pred score, that's the mean negative log likelihood for the out od sample points. So, when you run multiple models, you can then pic the model with the lowest mean oob negative log likelihood. Not really that interested in the coding exercise of the different models, but if I have time I'll get back to it. 
+
+
+http://seananderson.ca/2014/04/08/gamma-glms/
+
+# Part 2
+
+Simulation experiment. So the idea here I believe is to simulate data, where for example the true catches come from a log-normal distribution with mean intercept and sigma estimated sigma for that example, a gamma distribution for the other, and some collection of things for the third. 
+
+```{r}
+
+
+
+sim_catches <- function(seen_betas, seeing_betas, dist_par, seen_dist, variables, pol){
+  
+  sim_vars <- pol %>% 
+    select(variables)
+  
+  sim_prob <- 1 / (1 + exp(-as.matrix(sim_vars) %*% as.matrix(seeing_betas)))
+  
+  sim_seeing <- rbernoulli(nrow(pol), sim_prob) %>% as.numeric()
+  
+  if (seen_dist == "log_normal"){
+    
+    sim_catch <- rnorm(nrow(pol), as.matrix(sim_vars) %*% as.matrix(seen_betas), dist_par)
+
+    sim_catch <- exp(sim_catch * sim_seeing)
+    
+
+  } else if (seen_dist == "gamma"){
+    
+      shape <- dist_par^-2
+      
+      scale <-  exp( as.matrix(sim_vars) %*% as.matrix(seen_betas)) * dist_par^2
+    
+      sim_catch <- rgamma(nrow(pol),shape = shape, scale = scale) * sim_seeing
+
+  }
+  
+  return(sim_catch)
+}
+
+test_model <-
+  function(fit,
+  believed_dist,
+  believed_variables,
+  true_dist,
+  true_variables,
+  pol,
+  its = 100) {
+  # true_variables <- sims$true_variables[[1]]
+  #
+  # true_dist <- sims$true_model[[1]]
+  #
+  # believed_variables <- sims$believed_variable[[1]]
+  #
+  # believed_dist <- sims$believed_model[[1]]
+  #
+  
+  seen_betas <- fit$report[[1]]$seen_betas
+  
+  seeing_betas <- fit$report[[1]]$seeing_betas
+  
+  dist_par <- fit$report[[1]]$dist_par
+  
+  fits <- list()
+  
+  for (i in 1:its) {
+  simmed_data <-
+  sim_catches(
+  seen_betas = seen_betas,
+  seeing_betas = seeing_betas,
+  dist_par = dist_par,
+  seen_dist = true_dist,
+  variables = true_variables,
+  pol = pol
+  )
+  
+  
+  fitted_model <-
+  data_frame(
+  data = list(pol %>% mutate(catch = simmed_data)),
+  seen_model = believed_dist,
+  variables = believed_variables
+  ) %>%
+  mutate(fit = pmap(
+  list(
+  data = data,
+  seen_model = seen_model,
+  variables = variables
+  ),
+  fit_hw1
+  ))
+  
+  fits[i] <- (fitted_model$fit[[1]]$report)
+  
+  }
+  
+  return(fits)
+  
+  }
+  
+
+fitted_models <- true_models %>% 
+  mutate(models = 1:nrow(.)) %>% 
+  select(seen_model, variables, models, fit) %>% 
+  rename(true_model = seen_model, true_variables = variables)
+ 
+sims <- expand.grid(
+  believed_model = c("log_normal", "gamma"),
+  believed_variable = list("intercept", c("intercept", "watertmpc", "lat", "long")),
+  models = 1:nrow(models),
+  stringsAsFactors = F
+  ) %>%
+  as_data_frame() %>%
+  left_join(fitted_models, by = "models")
+
+sims <- sims %>% 
+  mutate(fits = pmap(list(
+    fit = fit, 
+    believed_dist = believed_dist,
+    believed_variables = believed_variables,
+    true_dist = true_dist,
+    true_variables = true_variables
+  ),test_model,
+  pol = pol))
+
+
+```
+
+Framework is there, calling it. how do you get TMB to shut up???
+
+What 
+
+
+
+
 
 
 
