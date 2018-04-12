@@ -65,3 +65,57 @@ Why treat "study" as a random effect? Might have very little data for any one in
 TO invert a matrix you need it to be full rank. So, if the hessian is no rank, then you can't invert it, so you can't get the standard errors
 
 
+# lecture 3 - kalman filters
+
+one state space definition - the latent variable has a time series process, with some markovian process
+
+consistency in time series models. two forms of consistency in time series. If you add more data within your model period, infill asymptotics, and if you add more time periods but the same number of data points per time periods thats sprawl asymptotics. There are two different implications of these two things
+
+REML - restricted maximum likelihood
+
+there's no guarantee that maximum likelihood is unbiased for a finite sample size
+
+e.g. variance. If you look at th maximum likelihood estimate of the variance for a linear model, it will just be the average squared deviation. Gets shrunk to the mean of the data and not the "true" value. 
+
+use REML to treat non-variance fixed effects as random, not entirely sure why
+
+
+# lab 3
+
+gompertz model. Growth rate goes to infinity at the extreme
+
+alpha over beta is the carrying capacity
+
+look up stochastic SRA
+
+autoregreesive term, it's the simplist biological model that is identical to a linear model
+
+sigma here is a process error
+
+when rho is negative in an autoregressive model you teh osscilation
+
+map function in TMB
+
+the mpa input has two basic roles, one is turning off a parameter, and the other is mirroring a parameter, or making some set of parameters in in the model all equal. 
+
+e.g. comparing a mixed effects model to a pure linear model. 
+
+map in this way basically fixes things at starting values, it's not actually setting things to NA?
+
+NA turns off, a level sets a initial value?
+
+reminder on inner and outer optimizer
+
+inner is the lapace approximation solving the random effects holding the fixed effects constant. Given the value of fixed effects, optimize random effects, do lapace approximation. 
+
+Then, the outer loop is holding the random effects constant, and then optimizing the fixed effects
+
+in the pollock example, sigma b is the process error
+
+of process and observation error are independent, then variances should be additivie
+
+standard error is just the standard deviation between your samples n divided by the square root of n if all n are independent
+
+the claim is that we can estimate the standard error around the mean from the variance of the sampling. 
+
+Need to calculate the standard error for the index and convert to the standard error of a log-normal file
