@@ -1,0 +1,136 @@
+---
+title: "homework-2"
+author: "Dan Ovando"
+date: "4/17/2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
+```
+
+```{r}
+library(TMB)
+library(SpatialDeltaGLMM)
+library(tidyverse)
+
+functions <- list.files(here::here("functions"))
+
+walk(functions, ~ here::here("functions", .x) %>% source()) # load local functions
+
+```
+
+
+Simulate clams 
+
+```{r}
+
+clams <- map_df(1:100, ~sim_clams(mean_counts = 2, sigma_site = 1, sigma_overdisp = 0.25, n_counts  = 10, n_sites = 10) %>% mutate(iteration = .x)) %>% 
+  nest(-iteration)
+
+models <- c("glmm","glmm-site","glmm-overdisp","glm")
+
+clams <- cross_df(list(clams = list(clams), model = models)) %>% 
+  unnest()
+
+```
+
+Fit candidate models
+
+1.	a generalized linear model, without any among-site variability or overdispersion.  
+
+so I take that to mean that you model it as there is some mean population, and each observation is just a draw from that
+
+The poisson link means that the linear model is in log space, and then the expected count is exp of the linear model
+
+y_i ~ dpois(exp(log_y_bar_i))
+
+log_y_bar_i = mean_count
+
+2.	a generalized linear mixed model (GLMM) with only among-site variability
+
+y_i ~ dpois(exp(log_y_bar_i))
+
+log_y_bar_i = mean_count + site_mean
+
+site_mean ~ dnorm(0, sigma_site)
+
+3.	a GLMM with only overdispersion
+
+y_i ~ dpois(exp(log_y_bar_i))
+
+log_y_bar_i = mean_count + overdispersion
+
+obs_deviations ~ dnorm(0, sigma_overdisp)
+
+4.	a GLMM with both among-site variability and overdispersion
+
+y_i ~ dpois(exp(log_y_bar_i))
+
+log_y_bar_i = mean_count + overdispersion + site_mean
+
+obs_deviations ~ dnorm(0, sigma_overfisp)
+
+site_mean ~ dnorm(0, sigma_site)
+
+```{r}
+
+TMB::compile(here::here("src","homework_2.cpp"))
+
+dyn.load(dynlib(here::here("src","homework_2")))
+
+containsfoo <- function(data, trueval = 2){
+  
+  data <- data %>% 
+    filter(variable == "mean_count") %>% 
+    slice(1)
+  
+  out <- trueval >= data$lower & trueval <= data$upper
+  
+}
+
+clams <- clams %>% 
+  filter(model == "glmm") %>% 
+  mutate(clam_estimates = map2(data,model, fit_hwk2)) 
+
+clams <- clams %>%
+  mutate(
+  mean_count_hat = map_dbl(clam_estimates, ~ .x %>% filter(variable == "mean_count") %>% {
+  .$estimate[1]
+  }),
+  contains_true = map_lgl(
+  clam_estimates,
+  containsfoo
+  ))
+
+
+
+```
+
+```{r}
+clams %>% 
+  ggplot(aes(mean_count_hat, fill = model)) + 
+  geom_vline(aes(xintercept = 2), linetype= 2) +
+  geom_density(alpha = 0.5)
+```
+
+```{r}
+
+clams %>% 
+  group_by(model) %>% 
+  summarise(percent_contains = mean(contains_true)) %>% 
+  ungroup() %>% 
+  mutate(model = fct_reorder(model, percent_contains)) %>% 
+  ggplot(aes(model, percent_contains)) + 
+  geom_col() + 
+  scale_y_continuous(labels = scales::percent)
+
+a = clams %>% 
+filter(model == "glmm")
+
+```
+
+
+
+
+
